@@ -4,22 +4,125 @@ output:
   html_document:
     keep_md: true
 ---
-
+opts_chunk$set(echo=TRUE)
 
 ## Loading and preprocessing the data
-
-
+```{r}
+setwd("/Users/konggas")
+activity <- read.csv("./activity.csv")
+activity$datep <- strptime(activity$date,"%Y-%m-%d")
+activity<-activity[order(activity$datep,activity$interval),]
+```
 
 ## What is mean total number of steps taken per day?
+```{r}
+library("plyr")
+act_day <- ddply(activity,~date,summarise,sum=sum(steps,na.rm=TRUE), mean=mean(steps,na.rm=TRUE), median=median(steps,na.rm=TRUE))
+```
+### Histogram of the total number of steps taken each day
+```{r echo=FALSE}
+barplot(act_day$sum, ylab="Frequency")
+```
+### Mean and median total number of steps taken per day
+```{r}
+print(act_day)
+```
 
 
 
 ## What is the average daily activity pattern?
-
+```{r}
+act_int <- ddply(activity,~interval,summarise,mean=mean(steps,na.rm=TRUE))
+act_ts <- ts(act_int$mean)
+```
+### Time series plot of the 5-minute interval and the average number of steps taken, averaged across all days
+```{r echo=FALSE}
+plot(act_ts,type="l",ylab="Average Steps")
+```
+### Interval 835 (row=104) has the maximum average steps taken.
+```{r}
+act_int[which.max(act_int$mean),]
+```
 
 
 ## Imputing missing values
 
+### Ttal number of missing values in the dataset 
+```{r}
+sum(is.na(activity$steps))
+```
+
+### Strategy for filling in all of the missing values in the dataset is  using either left or right non-missing value
+
+### New dataset that is equal to the original dataset but with the missing data filled in: act_imp
+```{r}
+fillin <- function(x) {
+  for (i in 2:nrow(x)) {
+    if (is.na(x[i,1]) == TRUE) {
+      x[i,1] <- x[i-1,1]
+    }
+  }
+  for (i in (nrow(x)-1):1) {
+    if (is.na(x[i,1]) == TRUE) {
+      x[i,1] <- x[i+1,1]
+    }
+  }
+  x
+}
+act_imp<-fillin(activity)
+```
+
+### Histogram of the total number of steps taken each day and Calculate
+```{r echo=FALSE}
+hist(act_imp$steps)
+```
+
+### Mean and median total number of steps taken per day
+```{r}
+act_day2 <- ddply(act_imp,~date,summarise,sum = sum(steps), mean=mean(steps,na.rm=TRUE),median=median(steps,na.rm=TRUE))
+
+print(act_day2)
+```
+They are the same. It happens that the means and medians of the imputed data are the same as original data since if there is "NA" value exist then the date has all "NA" values.
+
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+### Create a new factor variable in the dataset with two levels -- "weekday" and "weekend" indicating whether a given date is a weekday or weekend day. And it is named as act_imp3 
+```{r}
+act_imp2 <- act_imp
+act_imp2$day <- weekdays(act_imp2$datep)
+act_imp2$weekday<-""
+weekday <- function(x) {
+  res<-data.frame()
+  for (i in 1:nrow(x)) {
+    if (x[i,5] == "Sunday" || x[i,5] == "Saturday") {
+      x[i,6] = "weekend";
+    }
+    else {
+      x[i,6]="weekday";      
+    }
+  }
+  x
+}
+act_imp3<-weekday(act_imp2)
+act_imp3$weekday <- as.factor(act_imp3$weekday)
+```
+
+### Panel plot containing a time series plot of the 5-minute interval and the average number of steps taken, averaged across all weekday days or weekend days
+```{r}
+act_week <- ddply(act_imp3,~interval+weekday,summarise,mean=mean(steps,na.rm=TRUE))
+
+act_week1<-act_week[act_week$weekday=="weekday",c(1,3)]
+act_week2<-act_week[act_week$weekday=="weekend",c(1,3)]
+names(act_week1)[2]<- "weekday"
+names(act_week2)[2]<- "weekend"
+
+act_week_mer<-merge(act_week1,act_week2,by="interval")
+act_week_mer<-act_week_mer[,c(2,3)]
+act_ts <- ts(act_week_mer)
+```
+```{r echo=FALSE}
+plot(act_ts,type="l",xlab="interval number",main=NA)
+```
